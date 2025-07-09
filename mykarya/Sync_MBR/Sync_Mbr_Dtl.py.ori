@@ -1,0 +1,146 @@
+import os
+import shutil
+import logging
+import sys
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Function to get distribution period and directory details from user
+def get_distribution_info():
+    dist_period = input('Distribution Period: ')  # e.g., 202503
+    mbr_dir = input('Distribution directory: ')  # e.g., March_2025_Distribution#
+    return dist_period, mbr_dir
+
+# Example of Improved mkdir function error handling.
+def prepare_directories(source_dir, dist_period, destination_dir):
+    sur_dir = os.path.join(source_dir, dist_period)
+    des_dir = os.path.join(destination_dir, dist_period)
+
+    print(f'Looking for files in: {sur_dir}')
+    print(f'Output will be in: {des_dir}')
+
+    if not os.path.exists(sur_dir):
+        print(f'Source directory does not exist: {sur_dir}')
+        return None, None
+
+    try:
+        os.makedirs(des_dir, exist_ok=True)
+        print(f'Destination directory created: {des_dir}')
+    except Exception as e:
+        print(f'Error creating destination directory {des_dir}: {e}')
+        return None, None
+
+    return sur_dir, des_dir
+
+# Function to copy files from 'Roy_Dtl' subfolder
+def copy_files_from_subfolder(sur_dir, des_dir, subfolder_name):
+    for dirpath, dirnames, filenames in os.walk(sur_dir):
+        if subfolder_name in dirpath:
+            for filename in filenames:
+                source_file = os.path.join(dirpath, filename)
+                destination_file = os.path.join(des_dir, filename)
+                try:
+                    shutil.copy2(source_file, destination_file)
+                    print(f'Copied: {source_file} to {destination_file}')
+                except Exception as e:
+                    print(f'Error copying {source_file}: {e}')
+          
+# Function to list files matching certain criteria and write to 'member_list.txt'
+def list_files_in_directory(directory):
+    if not os.path.exists(directory):
+        print(f"Error: The directory '{directory}' does not exist.")
+        return
+    
+    output_lines = []
+    try:
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                item = entry.name
+                if '_I0' in item and '[SUCCESSOR' not in item:
+                    substring = item[item.index('I0'):item.index('_I0') + 17]  # Capture 15 characters after '_I0'
+                    output_lines.append(f"{item.strip()}  {substring}\n")  # Append the original line and the substring
+    except FileNotFoundError:
+        logging.error(f"File not found: {file_path}")
+        sys.exit(1)
+    except IOError as e:
+        logging.error(f"Error reading file: {e}")
+        sys.exit(1)
+    try:   
+        with open('member_list.txt', 'w') as fp:
+            fp.writelines(output_lines)  # Write collected lines to the output file
+        print('Done writing to member_list.txt.')
+    except Exception as e:
+        print(f"Error: {e}")
+
+# Function to generate mkdir batch file from 'member_list.txt'
+def create_mkdir_batch_file(dist_period, mbr_dir):
+    with open('member_list.txt', 'r') as ombr:
+        with open(f'01_{dist_period}_mkdir_ipi_fdr.bat', 'w') as fp:
+            for line in ombr.readlines():
+                expectedResult = line[-17:-6].strip()
+                dist_no = line[-5:].strip()
+                fp.write(f'mkdir "c:\\disrpt_2\\{expectedResult}\\{mbr_dir}\\{dist_no}" >> mkdir.log 2>&1\n')
+            print('mkdir Done')
+
+# Function to generate xcopy batch file from 'member_list.txt'
+def create_xcopy_batch_file(dist_period, mbr_dir):
+    with open('member_list.txt', 'r') as mmbr:
+        with open(f'02_{dist_period}_from_fdr.bat', 'w') as ff:
+            for mline in mmbr.readlines():
+                eR = mline[-17:-6] + '\\' + mbr_dir + '\\' + mline[-5:]
+                sR = mline[:-19]
+                ff.write(f'xcopy "c:\\disrpt_2\\dist\\{sR.strip()}" "c:\\disrpt_2\\{eR.strip()}" /E /H /C /I >> cp_dist.log 2>&1 \n')
+            print('xcopy Done')
+
+# Function to generate edit dir batch file from 'member_list.txt', remove 'space' to make the folder live
+def create_mvdir_batch_file(dist_period, mbr_dir):
+    with open('member_list.txt', 'r') as ombr:
+        unique_lines = set(ombr.readlines())  # Use a set to store unique lines
+
+        with open(f'03_{dist_period}_mvdir_ipi_fdr.bat', 'w') as fp:
+            for line in unique_lines:  # Iterate over unique lines
+                expectedResult = line[-17:-6].strip()
+                #fp.write(f'ren "c:\\disrpt_2\\{expectedResult}\\{mbr_dir} c:\\disrpt_2\\{expectedResult}\\{mbr_dir.replace(" ", "_")}" >> rendir.log 2>&1\n')
+                fp.write(f'ren "c:\\disrpt_2\\{expectedResult}\\{mbr_dir}" "{mbr_dir.replace(" ", "_")}" >> rendir.log 2>&1\n')
+                print(f'{expectedResult}\\{mbr_dir}')
+
+
+# Main function to execute the process
+def main(start_step=1):
+    # Step 1: Get distribution info from the user
+    dist_period, mbr_dir = get_distribution_info()
+    
+    # Step 2: Prepare directories (check if source exists and create destination folder)
+    source_dir = "X:\\Dist_Reports\\Dist_No_Report\\"
+    destination_dir = "C:\\DIVA\\MACP_MBR\\"
+    sur_dir, des_dir = prepare_directories(source_dir, dist_period, destination_dir)
+    
+    if sur_dir and des_dir:
+        # Step 3: Copy files from subfolder 'Roy_Dtl'
+        #subfolder_name = 'Roy_Dtl'
+        #copy_files_from_subfolder(sur_dir, des_dir, subfolder_name)
+        
+        # Step 4: List files and write to 'member_list.txt'
+        #list_files_in_directory(des_dir)
+
+        # Step 5: Create mkdir batch file
+        create_mkdir_batch_file(dist_period, mbr_dir)
+
+        # Step 6: Create mvdir batch file
+        create_mvdir_batch_file(dist_period, mbr_dir)
+        
+        # Step 7: Create xcopy batch file
+        create_xcopy_batch_file(dist_period, mbr_dir)
+    
+    print("Process completed successfully!")
+
+# Execute the main function
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        logging.error("Usage: python Sync_Mbr_Dtl.py <input_file> <output_file>")
+        sys.exit(1)
+
+    file_path = sys.argv[1]  # Specify the input file path from command line
+    output_path = sys.argv[2]  # Specify the output file path from command line
+    main()  # Start from Step 1
